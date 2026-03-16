@@ -1,0 +1,28 @@
+spring:
+  # 1. 데이터베이스 연결 설정
+  datasource:
+    url: jdbc:mysql://localhost:3306/neoark?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+    username: root
+    password: YOUR_PASSWORD # 설치 시 설정한 MySQL 비밀번호로 수정하세요!
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  # 2. JPA/Hibernate 설정
+  jpa:
+    hibernate:
+      # 개발 초기에는 update를 사용하여 엔티티 수정 시 DB에 자동 반영합니다.
+      ddl-auto: update
+    show-sql: true          # 실행되는 SQL을 콘솔에 출력
+    properties:
+      hibernate:
+        format_sql: true    # 출력되는 SQL을 보기 좋게 정렬
+        use_sql_comments: true # SQL 뒤에 어떤 로직인지 주석 추가
+
+  # 3. 파일 업로드 설정 (네이처링처럼 사진 위주 서비스에 필수)
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+# 4. 서버 포트 설정 (기본 8080)
+server:
+  port: 8080
