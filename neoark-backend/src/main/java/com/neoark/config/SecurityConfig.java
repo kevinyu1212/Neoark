@@ -1,21 +1,27 @@
 package com.neoark.config;
 
-import com.neoark.service.UserService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 
+import com.neoark.service.CustomOAuth2UserService;
+import com.neoark.service.UserService;
+
 @Configuration
+@EnableWebSecurity
 public class SecurityConfig {
 
     private final UserService userService;
+    private final CustomOAuth2UserService customOAuth2UserService;
 
-    // 자동 로그인을 위해 UserService(UserDetailsService 구현체)를 주입받습니다.
-    public SecurityConfig(UserService userService) {
+    public SecurityConfig(UserService userService, CustomOAuth2UserService customOAuth2UserService) {
         this.userService = userService;
+        this.customOAuth2UserService = customOAuth2UserService;
     }
 
     @Bean
@@ -23,31 +29,44 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
+    // [중요] 파비콘이나 에러 페이지 등은 시큐리티 필터를 아예 거치지 않게 합니다.
+    @Bean
+    public WebSecurityCustomizer webSecurityCustomizer() {
+        return (web) -> web.ignoring().requestMatchers("/favicon.ico", "/error");
+    }
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-            .csrf(csrf -> csrf.disable()) 
+            .csrf(csrf -> csrf.disable())
+            // [해결포인트 1] 팝업창을 뜨게 하는 기본 인증 기능을 끕니다.
+            .httpBasic(basic -> basic.disable()) 
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/users/join", "/api/users/login", "/login/**", "/oauth2/**").permitAll() 
+                // [해결포인트 2] 로그인 관련 모든 경로를 완전히 개방합니다.
+                .requestMatchers("/", "/login", "/login/**", "/oauth2/**", "/api/users/join", "/api/users/login").permitAll() 
                 .anyRequest().authenticated() 
             )
-            // 1. 자동 로그인 설정 (Remember-Me)
-            .rememberMe(remember -> remember
-                .key("neoark_secret_key_1234") // 쿠키 암호화 키
-                .tokenValiditySeconds(60 * 60 * 24 * 30) // 30일간 유지
-                .rememberMeParameter("remember-me") // 프론트 파라미터명
-                .userDetailsService(userService) // 인증에 사용할 서비스
+            .formLogin(form -> form
+                .defaultSuccessUrl("/api/users/me", true)
+                .permitAll()
             )
-            // 2. 소셜 로그인 설정 (OAuth2)
             .oauth2Login(oauth2 -> oauth2
-                .defaultSuccessUrl("/api/users/me") // 로그인 성공 시 이동할 곳
-                .failureUrl("/login?error")        // 실패 시 이동할 곳
+                .userInfoEndpoint(userInfo -> userInfo
+                    .userService(customOAuth2UserService) 
+                )
+                .defaultSuccessUrl("/api/users/me", true) 
+                .failureUrl("/login?error")
             )
-            // 3. 로그아웃 설정
+            .rememberMe(remember -> remember
+                .key("neoark_secret_key_1234") 
+                .tokenValiditySeconds(60 * 60 * 24 * 30) 
+                .rememberMeParameter("remember-me") 
+                .userDetailsService(userService) 
+            )
             .logout(logout -> logout
                 .logoutUrl("/api/users/logout")
-                .logoutSuccessUrl("/")
-                .deleteCookies("remember-me", "JSESSIONID") // 쿠키 삭제
+                .logoutSuccessUrl("/login")
+                .deleteCookies("remember-me", "JSESSIONID")
                 .invalidateHttpSession(true)
             );
 
